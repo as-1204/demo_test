@@ -151,8 +151,8 @@ def plot_hologram_recording(
     )
     axes[1, 3].plot(
         [
-            config.reference_frequency_x * 1e-3,
             -config.reference_frequency_x * 1e-3,
+            config.reference_frequency_x * 1e-3,
         ],
         [
             config.reference_frequency_y * 1e-3,
@@ -166,4 +166,53 @@ def plot_hologram_recording(
     axes[1, 3].set_xlabel("fx (cycles/mm)")
     axes[1, 3].set_ylabel("fy (cycles/mm)")
     figure.suptitle("Off-axis hologram recording")
+    return figure
+
+
+def plot_reconstruction(field: np.ndarray, config: SimulationConfig) -> Figure:
+    """Plot peak-normalized amplitude and wrapped phase of an object-plane field."""
+    field_array = np.asarray(field)
+    expected_shape = (config.ny, config.nx)
+    if (
+        field_array.ndim != 2
+        or field_array.shape != expected_shape
+        or not np.issubdtype(field_array.dtype, np.number)
+        or not np.all(np.isfinite(field_array))
+    ):
+        raise ValueError(f"field must be a finite numeric array with shape {expected_shape}.")
+    amplitude = np.abs(field_array)
+    amplitude_scale = float(np.max(amplitude))
+    if not np.isfinite(amplitude_scale) or amplitude_scale <= 0.0:
+        raise ValueError("field must have a finite, non-zero amplitude.")
+
+    x, y = config.coordinate_grid()
+    extent = (
+        x.min() * 1e3,
+        x.max() * 1e3,
+        y.min() * 1e3,
+        y.max() * 1e3,
+    )
+    figure, axes = plt.subplots(1, 2, figsize=(9, 4), constrained_layout=True)
+    axes[0].imshow(
+        amplitude / amplitude_scale,
+        extent=extent,
+        origin="upper",
+        vmin=0.0,
+        vmax=1.0,
+        cmap="inferno",
+    )
+    axes[0].set_title("Reconstructed amplitude (normalized to peak)")
+    axes[1].imshow(
+        np.angle(field_array),
+        extent=extent,
+        origin="upper",
+        vmin=-np.pi,
+        vmax=np.pi,
+        cmap="twilight",
+    )
+    axes[1].set_title("Reconstructed wrapped phase [-pi, pi] (rad)")
+    for axis in axes:
+        axis.set_xlabel("x (mm)")
+        axis.set_ylabel("y (mm)")
+    figure.suptitle("Digital hologram reconstruction")
     return figure

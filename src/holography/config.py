@@ -169,6 +169,71 @@ def make_hologram(object_field: np.ndarray, reference_field: np.ndarray) -> np.n
     return intensity
 
 
+def reconstruct_object_field(
+    hologram: np.ndarray,
+    config: SimulationConfig,
+    bandwidth: float = 8_000.0,
+) -> np.ndarray:
+    """Select the object-bearing diffraction order and reconstruct the object plane.
+
+    ``bandwidth`` is the half-width of a rectangular passband in cycles/m.
+    The selected order is the ``object * conjugate(reference)`` term, centered
+    at ``(-fcx, +fcy)`` on the sampled FFT axes. The y sign accounts for rows
+    running opposite to the positive physical y direction.
+    """
+    hologram_array = np.asarray(hologram)
+    expected_shape = (config.ny, config.nx)
+    if (
+        hologram_array.ndim != 2
+        or hologram_array.shape != expected_shape
+        or not np.issubdtype(hologram_array.dtype, np.number)
+        or np.iscomplexobj(hologram_array)
+        or not np.all(np.isfinite(hologram_array))
+    ):
+        raise ValueError(f"hologram must be a finite real array with shape {expected_shape}.")
+    if np.any(hologram_array < 0.0):
+        raise ValueError("hologram intensity must be non-negative.")
+    if not math.isfinite(bandwidth) or bandwidth <= 0.0:
+        raise ValueError("bandwidth must be finite and positive.")
+    if config.reference_amplitude <= 0.0:
+        raise ValueError("reference_amplitude must be positive for reconstruction.")
+
+    fcx = config.reference_frequency_x
+    fcy = config.reference_frequency_y
+    if abs(fcx) <= 2.0 * bandwidth and abs(fcy) <= 2.0 * bandwidth:
+        raise ValueError("reference carrier orders overlap the DC band at this bandwidth.")
+
+    fx, fy = config.frequency_grid()
+    order_center_x = -fcx
+    order_center_y = fcy
+    if (
+        order_center_x - bandwidth < fx.min()
+        or order_center_x + bandwidth > fx.max()
+        or order_center_y - bandwidth < fy.min()
+        or order_center_y + bandwidth > fy.max()
+    ):
+        raise ValueError("selected diffraction order extends beyond the sampled frequency range.")
+
+    passband = (
+        (np.abs(fx - order_center_x) <= bandwidth)
+        & (np.abs(fy - order_center_y) <= bandwidth)
+    )
+    if not np.any(passband):
+        raise ValueError("bandwidth does not include any sampled frequency bins.")
+    selected_order = ifft2_centered(fft2_centered(hologram_array) * passband)
+    sensor_object_estimate = selected_order * make_reference_field(config)
+    if not np.all(np.isfinite(sensor_object_estimate)):
+        raise ValueError("reconstructed sensor field must remain finite.")
+    object_estimate = propagate_angular_spectrum(
+        sensor_object_estimate,
+        config,
+        distance=-config.propagation_distance,
+    )
+    if not np.all(np.isfinite(object_estimate)):
+        raise ValueError("reconstructed object field must remain finite.")
+    return object_estimate
+
+
 def _validated_complex_field(field: np.ndarray, name: str) -> np.ndarray:
     field_array = np.asarray(field)
     if (

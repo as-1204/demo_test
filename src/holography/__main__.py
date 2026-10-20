@@ -32,6 +32,22 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Save the off-axis hologram recording visualization to an image file.",
     )
+    parser.add_argument(
+        "--reconstruct-hologram",
+        action="store_true",
+        help="Reconstruct the object-plane amplitude and wrapped phase from a recorded hologram.",
+    )
+    parser.add_argument(
+        "--save-reconstruction",
+        metavar="PATH",
+        help="Save the digital reconstruction visualization to an image file.",
+    )
+    parser.add_argument(
+        "--reconstruction-bandwidth-cycles-m",
+        type=float,
+        default=8_000.0,
+        help="Half-width of the selected diffraction-order passband in cycles/m.",
+    )
     return parser
 
 
@@ -54,7 +70,14 @@ def main() -> None:
     print(f"fx range: [{fx.min():.3e}, {fx.max():.3e}] cycles/m")
     print(f"fy range: [{fy.min():.3e}, {fy.max():.3e}] cycles/m")
 
-    if args.visualize or args.save_plot or args.record_hologram or args.save_hologram:
+    if (
+        args.visualize
+        or args.save_plot
+        or args.record_hologram
+        or args.save_hologram
+        or args.reconstruct_hologram
+        or args.save_reconstruction
+    ):
         from matplotlib import pyplot as plt
 
         object_field = make_initial_object_field(cfg)
@@ -70,20 +93,45 @@ def main() -> None:
             else:
                 plt.close(figure)
 
-        if args.record_hologram or args.save_hologram:
-            from .config import make_reference_field, propagate_angular_spectrum
+        if (
+            args.record_hologram
+            or args.save_hologram
+            or args.reconstruct_hologram
+            or args.save_reconstruction
+        ):
+            from .config import make_hologram, make_reference_field, propagate_angular_spectrum
             from .visualization import plot_hologram_recording
 
             sensor_field = propagate_angular_spectrum(object_field, cfg)
             reference_field = make_reference_field(cfg)
-            figure = plot_hologram_recording(sensor_field, reference_field, cfg)
-            if args.save_hologram:
-                figure.savefig(args.save_hologram, dpi=150)
-                print(f"Saved hologram visualization: {args.save_hologram}")
-            if args.record_hologram:
-                plt.show()
-            else:
-                plt.close(figure)
+            if args.record_hologram or args.save_hologram:
+                figure = plot_hologram_recording(sensor_field, reference_field, cfg)
+                if args.save_hologram:
+                    figure.savefig(args.save_hologram, dpi=150)
+                    print(f"Saved hologram visualization: {args.save_hologram}")
+                if args.record_hologram:
+                    plt.show()
+                else:
+                    plt.close(figure)
+
+            if args.reconstruct_hologram or args.save_reconstruction:
+                from .config import reconstruct_object_field
+                from .visualization import plot_reconstruction
+
+                hologram = make_hologram(sensor_field, reference_field)
+                reconstructed_field = reconstruct_object_field(
+                    hologram,
+                    cfg,
+                    bandwidth=args.reconstruction_bandwidth_cycles_m,
+                )
+                figure = plot_reconstruction(reconstructed_field, cfg)
+                if args.save_reconstruction:
+                    figure.savefig(args.save_reconstruction, dpi=150)
+                    print(f"Saved reconstruction visualization: {args.save_reconstruction}")
+                if args.reconstruct_hologram:
+                    plt.show()
+                else:
+                    plt.close(figure)
 
 
 if __name__ == "__main__":

@@ -2,16 +2,26 @@ from __future__ import annotations
 
 import argparse
 
-from .config import SimulationConfig
+from .config import SimulationConfig, make_initial_object_field
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Inspect the Phase 1 holography grid configuration.")
+    parser = argparse.ArgumentParser(description="Inspect the holography simulation grid configuration.")
     parser.add_argument("--wavelength-nm", type=float, default=532.0, help="Wavelength in nanometers.")
     parser.add_argument("--pixel-pitch-um", type=float, default=8.0, help="Sensor pixel pitch in micrometers.")
     parser.add_argument("--nx", type=int, default=512, help="Number of samples along x.")
     parser.add_argument("--ny", type=int, default=512, help="Number of samples along y.")
     parser.add_argument("--distance-m", type=float, default=0.10, help="Propagation distance in meters.")
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Show intensity and phase at several propagation distances.",
+    )
+    parser.add_argument(
+        "--save-plot",
+        metavar="PATH",
+        help="Save the propagation visualization to an image file instead of opening a window.",
+    )
     return parser
 
 
@@ -33,6 +43,21 @@ def main() -> None:
     print(f"y range: [{y.min():.3e}, {y.max():.3e}] m")
     print(f"fx range: [{fx.min():.3e}, {fx.max():.3e}] cycles/m")
     print(f"fy range: [{fy.min():.3e}, {fy.max():.3e}] cycles/m")
+
+    if args.visualize or args.save_plot:
+        from matplotlib import pyplot as plt
+
+        from .visualization import plot_propagation
+
+        object_field = make_initial_object_field(cfg)
+        figure = plot_propagation(object_field, cfg)
+        if args.save_plot:
+            figure.savefig(args.save_plot, dpi=150)
+            print(f"Saved propagation plot: {args.save_plot}")
+        if args.visualize:
+            plt.show()
+        else:
+            plt.close(figure)
 
 
 if __name__ == "__main__":

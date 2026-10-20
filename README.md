@@ -58,6 +58,29 @@ overlap the DC band or each other and remain below Nyquist. This bandwidth is a
 practical scene assumption, not a strict limit, so inspect the spectrum when
 using sharper or higher-frequency objects.
 
+## Reconstruct an object from a hologram
+
+Reconstruct and display the object's normalized amplitude and wrapped phase:
+
+```bash
+python -m holography --reconstruct-hologram
+```
+
+Save the reconstruction without opening a window:
+
+```bash
+python -m holography --save-reconstruction reconstruction.png
+```
+
+The reconstruction selects the `object * conjugate(reference)` order with a
+rectangular passband. Its default half-width is `8,000 cycles/m` on each axis;
+change it with `--reconstruction-bandwidth-cycles-m`. The selected order must
+fit inside the sampled frequency range and remain separated from DC and the
+conjugate order. The selected spectrum is inverse transformed, multiplied by
+the configured reference wave to remove its carrier, and reverse propagated
+to the object plane. The plot normalizes amplitude to its peak and displays
+phase wrapped to `[-pi, pi]` radians.
+
 ## Core API
 
 ```python
@@ -70,6 +93,7 @@ from holography import (
     make_initial_object_field,
     make_reference_field,
     propagate_angular_spectrum,
+    reconstruct_object_field,
 )
 
 cfg = SimulationConfig(wavelength=532e-9, pixel_pitch=8e-6, nx=512, ny=512)
@@ -80,6 +104,7 @@ sensor_field = propagate_angular_spectrum(object_field, cfg)
 reference_field = make_reference_field(cfg)
 hologram = make_hologram(sensor_field, reference_field)
 recovered_field = propagate_angular_spectrum(sensor_field, cfg, distance=-cfg.propagation_distance)
+reconstructed_field = reconstruct_object_field(hologram, cfg)
 ```
 
 The coordinate convention follows the Phase 0 roadmap:
@@ -93,6 +118,7 @@ The coordinate convention follows the Phase 0 roadmap:
 - `propagate_angular_spectrum(field, cfg, distance=None)` uses the configured distance by default; a negative distance propagates in reverse
 - `make_reference_field(cfg)` creates `reference_amplitude * exp(1j * 2*pi*(fcx*x + fcy*y))`, with carrier frequencies in cycles/m
 - `make_hologram(object_field, reference_field)` returns the finite real intensity `abs(object_field + reference_field)**2`
+- `reconstruct_object_field(hologram, cfg, bandwidth=8_000)` selects and recenters the object-bearing order, then reverse propagates it to the object plane
 - Set `band_limited=True` to remove evanescent waves and frequencies outside the sampled angular-spectrum limits
 
 ## Notes

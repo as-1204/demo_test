@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Tuple
 
 import numpy as np
@@ -17,10 +18,12 @@ class SimulationConfig:
     propagation_distance: float = 0.10
 
     def __post_init__(self) -> None:
-        if self.wavelength <= 0.0:
-            raise ValueError("wavelength must be positive.")
-        if self.pixel_pitch <= 0.0:
-            raise ValueError("pixel_pitch must be positive.")
+        if not math.isfinite(self.wavelength) or self.wavelength <= 0.0:
+            raise ValueError("wavelength must be finite and positive.")
+        if not math.isfinite(self.pixel_pitch) or self.pixel_pitch <= 0.0:
+            raise ValueError("pixel_pitch must be finite and positive.")
+        if not math.isfinite(self.propagation_distance):
+            raise ValueError("propagation_distance must be finite.")
         if self.nx <= 0 or self.ny <= 0:
             raise ValueError("nx and ny must be positive integers.")
 
@@ -93,3 +96,96 @@ def fft2_centered(field: np.ndarray) -> np.ndarray:
 def ifft2_centered(field: np.ndarray) -> np.ndarray:
     """Inverse FFT for the same centered-field convention."""
     return np.fft.ifftshift(np.fft.ifft2(np.fft.fftshift(field)))
+
+
+def make_complex_field(amplitude: np.ndarray, phase: np.ndarray) -> np.ndarray:
+    """Combine non-negative amplitude and phase (radians) into a complex field."""
+    raw_amplitude = np.asarray(amplitude)
+    raw_phase = np.asarray(phase)
+    if (
+        not np.issubdtype(raw_amplitude.dtype, np.number)
+        or not np.issubdtype(raw_phase.dtype, np.number)
+        or np.iscomplexobj(raw_amplitude)
+        or np.iscomplexobj(raw_phase)
+    ):
+        raise ValueError("amplitude and phase must be real numeric values.")
+    amplitude_array, phase_array = np.broadcast_arrays(
+        raw_amplitude.astype(float),
+        raw_phase.astype(float),
+    )
+    if not np.all(np.isfinite(amplitude_array)) or not np.all(np.isfinite(phase_array)):
+        raise ValueError("amplitude and phase must contain only finite values.")
+    if np.any(amplitude_array < 0.0):
+        raise ValueError("amplitude must be non-negative.")
+    return amplitude_array * np.exp(1j * phase_array)
+
+
+def make_initial_object_field(
+    config: SimulationConfig,
+    sigma: float = 0.35e-3,
+    phase_amplitude: float = 0.5,
+    phase_frequency: float = 2_000.0,
+) -> np.ndarray:
+    """Create the Gaussian-amplitude, sinusoidal-phase Phase 0 object field."""
+    if not math.isfinite(sigma) or sigma <= 0.0:
+        raise ValueError("sigma must be finite and positive.")
+    if not math.isfinite(phase_amplitude):
+        raise ValueError("phase_amplitude must be finite.")
+    if not math.isfinite(phase_frequency) or phase_frequency < 0.0:
+        raise ValueError("phase_frequency must be finite and non-negative.")
+
+    x, y = config.coordinate_grid()
+    amplitude = np.exp(-(x**2 + y**2) / (2.0 * sigma**2))
+    phase = phase_amplitude * np.cos(2.0 * np.pi * phase_frequency * x)
+    return make_complex_field(amplitude, phase)
+
+
+def propagate_angular_spectrum(
+    field: np.ndarray,
+    config: SimulationConfig,
+    distance: float | None = None,
+    band_limited: bool = False,
+) -> np.ndarray:
+    """Propagate a sampled complex field with the angular spectrum method.
+
+    Negative distances perform reverse propagation. With ``band_limited=True``,
+    evanescent waves and frequencies beyond the sampled angular-spectrum limits
+    are removed.
+    """
+    field_array = np.asarray(field)
+    expected_shape = (config.ny, config.nx)
+    if field_array.ndim != 2 or field_array.shape != expected_shape:
+        raise ValueError(f"field must have shape {expected_shape}.")
+    if not np.issubdtype(field_array.dtype, np.number) or not np.all(np.isfinite(field_array)):
+        raise ValueError("field must contain only finite numeric values.")
+
+    z = config.propagation_distance if distance is None else distance
+    if not math.isfinite(z):
+        raise ValueError("distance must be finite.")
+    if z == 0.0:
+        return np.array(field_array, dtype=complex, copy=True)
+
+    fx, fy = config.frequency_grid()
+    kx, ky = config.wave_number_grid()
+    wave_number = 2.0 * np.pi / config.wavelength
+    kz = np.sqrt((wave_number**2 - kx**2 - ky**2).astype(complex))
+
+    if band_limited:
+        abs_z = abs(z)
+        fx_limit = 1.0 / (
+            config.wavelength
+            * math.sqrt(1.0 + (2.0 * abs_z / (config.nx * config.dx)) ** 2)
+        )
+        fy_limit = 1.0 / (
+            config.wavelength
+            * math.sqrt(1.0 + (2.0 * abs_z / (config.ny * config.dy)) ** 2)
+        )
+        propagating = fx**2 + fy**2 <= (1.0 / config.wavelength) ** 2
+        sampled = (np.abs(fx) <= fx_limit) & (np.abs(fy) <= fy_limit)
+        valid = propagating & sampled
+        transfer = np.zeros(kz.shape, dtype=complex)
+        transfer[valid] = np.exp(1j * kz[valid] * z)
+    else:
+        transfer = np.exp(1j * kz * z)
+
+    return ifft2_centered(fft2_centered(field_array) * transfer)

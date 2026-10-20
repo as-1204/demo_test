@@ -1,12 +1,15 @@
-"""Phase 1 numerical foundation for scalar holography simulations."""
+"""Numerical tools for scalar holography simulations."""
 
 from .config import (
     SimulationConfig,
     fft2_centered,
     ifft2_centered,
+    make_complex_field,
     make_coordinate_grid,
     make_frequency_grid,
+    make_initial_object_field,
     make_wave_number_grid,
+    propagate_angular_spectrum,
 )
 
 __all__ = [
@@ -16,6 +19,9 @@ __all__ = [
     "make_wave_number_grid",
     "fft2_centered",
     "ifft2_centered",
+    "make_complex_field",
+    "make_initial_object_field",
+    "propagate_angular_spectrum",
 ]
 
 __version__ = "0.1.0"

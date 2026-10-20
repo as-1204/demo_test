@@ -97,21 +97,21 @@ Pythonで計算機合成ホログラム（CGH）を生成し、デジタルホ�
 
 ## 進捗
 
-- 現在のPhase：Phase 2（複素物体光と伝搬）
-- 完了済み：ロードマップ・進行ルールの作成、Phase 0 の物理パラメーター・座標・FFT・位相規約の確定、Phase 1 の Python プロジェクト・依存関係・座標・周波数グリッド・FFT シフト規約の実装とテスト
-- 未完了：Phase 2 の複素物体光の生成、角スペクトル法による伝搬実装、基本ケースの検証
+- 現在のPhase：Phase 3（参照光とホログラム記録）
+- 完了済み：ロードマップ・進行ルールの作成、Phase 0 の物理パラメーター・座標・FFT・位相規約の確定、Phase 1 の Python プロジェクト・依存関係・座標・周波数グリッド・FFT シフト規約の実装とテスト、Phase 2 の複素物体光生成・角スペクトル伝搬・基本ケースの検証
+- 未完了：Phase 3 の傾斜参照光、ホログラム強度計算、スペクトル上の回折次数分離
 
 ## 次の会話への申し送り
 
 この欄は各作業セッションの終了時に、次に着手する人がそのまま作業を再開できるよう更新する。Phaseの途中で終わる場合も必ず記入する。
 
-- **作業日時／対象Phase：** 2026-10-20／Phase 1
-- **今回完了したこと：** Phase 0 の既定パラメーター、座標・FFT・複素位相の規約を Python の設定・グリッド生成・FFT シフト規約として実装し、形状・単位・対称性・FFTラウンドトリップのテストを追加して通過させた。
-- **変更したファイル：** `README.md`, `pyproject.toml`, `requirements.txt`, `src/holography/__init__.py`, `src/holography/__main__.py`, `src/holography/config.py`, `tests/test_phase1.py`, `ROADMAP.md`
-- **確定した仕様・判断：** 532 nm、512 x 512、8 µm ピクセルピッチ、座標は `x[j] = (j - floor(Nx/2)) dx` / `y[i] = (floor(Ny/2) - i) dy`、周波数は `fftshift(fftfreq(...))`、波数は `kx = 2 pi fx` で定義し、FFT は `fftshift(fft2(ifftshift(U)))` と `ifftshift(ifft2(fftshift(U)))` の規約を採用した。
-- **未完了・保留事項：** Phase 2 の複素物体光生成、伝搬距離ゼロ・平面波・帯域制限のテスト、および角スペクトル法の実装。
-- **実行した検証と結果：** `python -m pytest -q` を実行し、5 個の Phase 1 テストがすべて pass（5 passed）。CLI の `PYTHONPATH=src python -m holography ...` も動作確認した。
-- **次に行うこと：** Phase 2 として複素振幅の生成と角スペクトル法に進む。
+- **作業日時／対象Phase：** 2026-10-20／Phase 2
+- **今回完了したこと：** 振幅・位相からの複素場生成とPhase 0で定めたガウス振幅・正弦位相の初期物体場生成、角スペクトル法の順方向・逆方向伝搬、エバネッセント波とサンプリング上のエイリアス周波数を除く帯域制限を実装した。距離ゼロ、平面波、往復伝搬、帯域制限をテストした。
+- **変更したファイル：** `README.md`, `ROADMAP.md`, `pyproject.toml`, `src/holography/__init__.py`, `src/holography/__main__.py`, `src/holography/config.py`, `tests/test_phase2.py`
+- **確定した仕様・判断：** `make_complex_field` は非負実振幅と実位相（rad）を受け取り `A exp(i phi)` を返す。`propagate_angular_spectrum` は距離省略時に設定値を使い、負距離を逆伝搬として扱う。`band_limited=True` では伝搬波成分と角スペクトル法のサンプリング限界内の周波数のみを通す。
+- **未完了・保留事項：** Phase 2 の未完了項目なし。逆伝搬はエバネッセント波を含む場合に不安定になり得るため、必要な場合は `band_limited=True` を使う。
+- **実行した検証と結果：** `python -m pytest -q` を実行し、Phase 1・2 の全14テストが pass（14 passed）。`git diff --check` も pass。
+- **次に行うこと：** Phase 3 として傾斜平面参照光、ホログラム強度の計算、回折次数の分離条件の検証に進む。
 - **注意点：** 物理条件や FFT 規約を変更する場合は、ここで定義した前提と対応するテストを先に更新する。
 
 ### 次回以降の記入テンプレート

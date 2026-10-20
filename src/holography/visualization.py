@@ -4,7 +4,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
-from .config import SimulationConfig, propagate_angular_spectrum
+from .config import (
+    SimulationConfig,
+    fft2_centered,
+    make_hologram,
+    propagate_angular_spectrum,
+)
 
 
 def plot_propagation(
@@ -67,4 +72,98 @@ def plot_propagation(
     axes[0, 0].set_ylabel("Intensity\n y (mm)")
     axes[1, 0].set_ylabel("Phase (rad)\n y (mm)")
     figure.suptitle("Angular-spectrum propagation")
+    return figure
+
+
+def plot_hologram_recording(
+    object_field: np.ndarray,
+    reference_field: np.ndarray,
+    config: SimulationConfig,
+) -> Figure:
+    """Plot the recorded hologram, complex fields, and its centered spectrum."""
+    hologram = make_hologram(object_field, reference_field)
+    total_field = np.asarray(object_field) + np.asarray(reference_field)
+    spectrum = np.abs(fft2_centered(hologram))
+    spectrum_display = np.log1p(spectrum)
+
+    x, y = config.coordinate_grid()
+    spatial_extent = (
+        x.min() * 1e3,
+        x.max() * 1e3,
+        y.min() * 1e3,
+        y.max() * 1e3,
+    )
+    fx, fy = config.frequency_grid()
+    frequency_extent = (
+        fx.min() * 1e-3,
+        fx.max() * 1e-3,
+        fy.min() * 1e-3,
+        fy.max() * 1e-3,
+    )
+    amplitude_fields = (object_field, reference_field, total_field)
+    amplitude_titles = ("Object amplitude", "Reference amplitude", "Sensor field amplitude")
+    phase_titles = ("Object phase", "Reference phase", "Sensor field phase")
+    figure, axes = plt.subplots(2, 4, figsize=(16, 7), constrained_layout=True)
+
+    for column, (field, amplitude_title, phase_title) in enumerate(
+        zip(amplitude_fields, amplitude_titles, phase_titles)
+    ):
+        amplitude = np.abs(field)
+        scale = float(np.max(amplitude))
+        axes[0, column].imshow(
+            amplitude / scale if scale > 0.0 else amplitude,
+            extent=spatial_extent,
+            origin="lower",
+            vmin=0.0,
+            cmap="inferno",
+        )
+        axes[0, column].set_title(amplitude_title)
+        axes[1, column].imshow(
+            np.angle(field),
+            extent=spatial_extent,
+            origin="lower",
+            vmin=-np.pi,
+            vmax=np.pi,
+            cmap="twilight",
+        )
+        axes[1, column].set_title(phase_title)
+        for row in range(2):
+            axes[row, column].set_xlabel("x (mm)")
+            axes[row, column].set_ylabel("y (mm)")
+
+    intensity_scale = float(np.max(hologram))
+    axes[0, 3].imshow(
+        hologram / intensity_scale if intensity_scale > 0.0 else hologram,
+        extent=spatial_extent,
+        origin="lower",
+        vmin=0.0,
+        vmax=1.0,
+        cmap="inferno",
+    )
+    axes[0, 3].set_title("Normalized hologram intensity")
+    axes[0, 3].set_xlabel("x (mm)")
+    axes[0, 3].set_ylabel("y (mm)")
+    axes[1, 3].imshow(
+        spectrum_display,
+        extent=frequency_extent,
+        origin="lower",
+        cmap="viridis",
+    )
+    axes[1, 3].plot(
+        [
+            config.reference_frequency_x * 1e-3,
+            -config.reference_frequency_x * 1e-3,
+        ],
+        [
+            config.reference_frequency_y * 1e-3,
+            -config.reference_frequency_y * 1e-3,
+        ],
+        linestyle="none",
+        marker="x",
+        color="red",
+    )
+    axes[1, 3].set_title("log(1 + |FFT(hologram)|)")
+    axes[1, 3].set_xlabel("fx (cycles/mm)")
+    axes[1, 3].set_ylabel("fy (cycles/mm)")
+    figure.suptitle("Off-axis hologram recording")
     return figure

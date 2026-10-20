@@ -22,6 +22,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Save the propagation visualization to an image file instead of opening a window.",
     )
+    parser.add_argument(
+        "--record-hologram",
+        action="store_true",
+        help="Show the off-axis hologram, complex sensor fields, and Fourier spectrum.",
+    )
+    parser.add_argument(
+        "--save-hologram",
+        metavar="PATH",
+        help="Save the off-axis hologram recording visualization to an image file.",
+    )
     return parser
 
 
@@ -44,20 +54,36 @@ def main() -> None:
     print(f"fx range: [{fx.min():.3e}, {fx.max():.3e}] cycles/m")
     print(f"fy range: [{fy.min():.3e}, {fy.max():.3e}] cycles/m")
 
-    if args.visualize or args.save_plot:
+    if args.visualize or args.save_plot or args.record_hologram or args.save_hologram:
         from matplotlib import pyplot as plt
 
-        from .visualization import plot_propagation
-
         object_field = make_initial_object_field(cfg)
-        figure = plot_propagation(object_field, cfg)
-        if args.save_plot:
-            figure.savefig(args.save_plot, dpi=150)
-            print(f"Saved propagation plot: {args.save_plot}")
-        if args.visualize:
-            plt.show()
-        else:
-            plt.close(figure)
+        if args.visualize or args.save_plot:
+            from .visualization import plot_propagation
+
+            figure = plot_propagation(object_field, cfg)
+            if args.save_plot:
+                figure.savefig(args.save_plot, dpi=150)
+                print(f"Saved propagation plot: {args.save_plot}")
+            if args.visualize:
+                plt.show()
+            else:
+                plt.close(figure)
+
+        if args.record_hologram or args.save_hologram:
+            from .config import make_reference_field, propagate_angular_spectrum
+            from .visualization import plot_hologram_recording
+
+            sensor_field = propagate_angular_spectrum(object_field, cfg)
+            reference_field = make_reference_field(cfg)
+            figure = plot_hologram_recording(sensor_field, reference_field, cfg)
+            if args.save_hologram:
+                figure.savefig(args.save_hologram, dpi=150)
+                print(f"Saved hologram visualization: {args.save_hologram}")
+            if args.record_hologram:
+                plt.show()
+            else:
+                plt.close(figure)
 
 
 if __name__ == "__main__":

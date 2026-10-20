@@ -7,7 +7,9 @@ from .config import (
     make_complex_field,
     make_coordinate_grid,
     make_frequency_grid,
+    make_hologram,
     make_initial_object_field,
+    make_reference_field,
     make_wave_number_grid,
     propagate_angular_spectrum,
 )
@@ -21,6 +23,8 @@ __all__ = [
     "ifft2_centered",
     "make_complex_field",
     "make_initial_object_field",
+    "make_reference_field",
+    "make_hologram",
     "propagate_angular_spectrum",
 ]
 

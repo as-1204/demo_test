@@ -16,6 +16,9 @@ class SimulationConfig:
     nx: int = 512
     ny: int = 512
     propagation_distance: float = 0.10
+    reference_amplitude: float = 1.0
+    reference_frequency_x: float = 20_000.0
+    reference_frequency_y: float = 0.0
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.wavelength) or self.wavelength <= 0.0:
@@ -26,6 +29,10 @@ class SimulationConfig:
             raise ValueError("propagation_distance must be finite.")
         if self.nx <= 0 or self.ny <= 0:
             raise ValueError("nx and ny must be positive integers.")
+        if not math.isfinite(self.reference_amplitude) or self.reference_amplitude < 0.0:
+            raise ValueError("reference_amplitude must be finite and non-negative.")
+        if not math.isfinite(self.reference_frequency_x) or not math.isfinite(self.reference_frequency_y):
+            raise ValueError("reference frequencies must be finite.")
 
     @property
     def dx(self) -> float:
@@ -138,6 +145,39 @@ def make_initial_object_field(
     amplitude = np.exp(-(x**2 + y**2) / (2.0 * sigma**2))
     phase = phase_amplitude * np.cos(2.0 * np.pi * phase_frequency * x)
     return make_complex_field(amplitude, phase)
+
+
+def make_reference_field(config: SimulationConfig) -> np.ndarray:
+    """Create the configured tilted plane-wave reference field."""
+    x, y = config.coordinate_grid()
+    phase = 2.0 * np.pi * (
+        config.reference_frequency_x * x + config.reference_frequency_y * y
+    )
+    return config.reference_amplitude * np.exp(1j * phase)
+
+
+def make_hologram(object_field: np.ndarray, reference_field: np.ndarray) -> np.ndarray:
+    """Record the real-valued interference intensity of two complex fields."""
+    object_array = _validated_complex_field(object_field, "object_field")
+    reference_array = _validated_complex_field(reference_field, "reference_field")
+    if object_array.shape != reference_array.shape:
+        raise ValueError("object_field and reference_field must have the same shape.")
+    with np.errstate(over="ignore", invalid="ignore"):
+        intensity = np.asarray(np.abs(object_array + reference_array) ** 2, dtype=float)
+    if not np.all(np.isfinite(intensity)):
+        raise ValueError("hologram intensity must remain finite.")
+    return intensity
+
+
+def _validated_complex_field(field: np.ndarray, name: str) -> np.ndarray:
+    field_array = np.asarray(field)
+    if (
+        field_array.ndim != 2
+        or not np.issubdtype(field_array.dtype, np.number)
+        or not np.all(np.isfinite(field_array))
+    ):
+        raise ValueError(f"{name} must be a finite 2D numeric array.")
+    return field_array
 
 
 def propagate_angular_spectrum(
